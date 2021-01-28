@@ -36,7 +36,8 @@ def test(data,
          save_conf=False,  # save auto-label confidences
          plots=True,
          log_imgs=0,  # number of logged images
-         compute_loss=None):
+         compute_loss=None,
+         channels=3):
 
     # Initialize/load model and set device
     training = model is not None
@@ -208,9 +209,9 @@ def test(data,
         # Plot images
         if plots and batch_i < 3:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
-            Thread(target=plot_images, args=(img, targets, paths, f, names), daemon=True).start()
+            Thread(target=plot_images, args=(img, targets, paths, f, names, channels), daemon=True).start()
             f = save_dir / f'test_batch{batch_i}_pred.jpg'  # predictions
-            Thread(target=plot_images, args=(img, output_to_target(output), paths, f, names), daemon=True).start()
+            Thread(target=plot_images, args=(img, output_to_target(output), paths, f, names, channels), daemon=True).start()
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy

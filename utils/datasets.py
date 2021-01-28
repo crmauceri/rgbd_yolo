@@ -56,7 +56,8 @@ def exif_size(img):
 
 
 def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=False, cache=False, pad=0.0, rect=False,
-                      rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix=''):
+                      rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix='',
+                      img_suffix='image', label_suffix='label', depth_suffix='depth', void_classes=[], valid_classes=[]):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -68,7 +69,12 @@ def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=Fa
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix)
+                                      prefix=prefix,
+                                      img_suffix=img_suffix,
+                                      label_suffix=label_suffix,
+                                      depth_suffix=depth_suffix,
+                                      void_classes=void_classes,
+                                      valid_classes=valid_classes)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // world_size, batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -328,15 +334,19 @@ class LoadStreams:  # multiple IP or RTSP cameras
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-def img2label_paths(img_paths):
-    # Define label paths as a function of image paths
-    sa, sb = os.sep + 'images' + os.sep, os.sep + 'labels' + os.sep  # /images/, /labels/ substrings
-    return [x.replace(sa, sb, 1).replace('.' + x.split('.')[-1], '.txt') for x in img_paths]
+def img2label_paths(img_paths, img_suffix='images', label_suffix='labels'):
+    # Define label paths as a function of image paths # /images/, /labels/ substrings
+    return [x.replace(img_suffix, label_suffix).replace('.' + x.split('.')[-1], '.txt') for x in img_paths]
 
+def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
+    # Define depth paths as a function of image paths # /images/, /depth/ substrings
+    return [x.replace(img_suffix, depth_suffix).replace('.' + x.split('.')[-1], '.png') for x in img_paths]
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='',
+                 img_suffix='image', label_suffix='label', depth_suffix='depth',
+                 void_classes=[], valid_classes=[], use_depth=True):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -345,6 +355,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
+        self.void_classes = void_classes
+        self.valid_idx = dict(zip(valid_classes, range(len(valid_classes))))
+        self.use_depth = use_depth
 
         try:
             f = []  # image files
@@ -365,7 +378,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
 
         # Check cache
-        self.label_files = img2label_paths(self.img_files)  # labels
+        self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels
         cache_path = Path(self.label_files[0]).parent.with_suffix('.cache')  # cached labels
         if cache_path.is_file():
             cache = torch.load(cache_path)  # load
@@ -386,7 +399,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.labels = list(labels)
         self.shapes = np.array(shapes, dtype=np.float64)
         self.img_files = list(cache.keys())  # update
-        self.label_files = img2label_paths(cache.keys())  # update
+        self.label_files = img2label_paths(cache.keys(), img_suffix, label_suffix) # update
+        if self.use_depth:
+            self.depth_files = img2depth_paths(cache.keys(), img_suffix, depth_suffix)
+
         if single_cls:
             for x in self.labels:
                 x[:, 0] = 0
@@ -424,15 +440,24 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         # Cache images into memory for faster training (WARNING: large datasets may exceed system RAM)
         self.imgs = [None] * n
+        self.depth = [None] * n
         if cache_images:
             gb = 0  # Gigabytes of cached images
             self.img_hw0, self.img_hw = [None] * n, [None] * n
             results = ThreadPool(8).imap(lambda x: load_image(*x), zip(repeat(self), range(n)))  # 8 threads
             pbar = tqdm(enumerate(results), total=n)
             for i, x in pbar:
-                self.imgs[i], self.img_hw0[i], self.img_hw[i] = x  # img, hw_original, hw_resized = load_image(self, i)
+                self.imgs[i] = x['image']
+                self.img_hw0[i] = x['org_size']
+                self.img_hw[i] = x['size']
                 gb += self.imgs[i].nbytes
+
+                if self.use_depth:
+                    self.depth = x['depth']
+                    gb += self.depth[i].nbytes
+
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
+
 
     def cache_labels(self, path=Path('./labels.cache'), prefix=''):
         # Cache dataset labels, check images and read shapes
@@ -451,12 +476,16 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if os.path.isfile(lb_file):
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
-                        l = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
+                        l = np.array([x.split(',') for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
                     if len(l):
                         assert l.shape[1] == 5, 'labels require 5 columns each'
                         assert (l >= 0).all(), 'negative labels'
                         assert (l[:, 1:] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
+                        # Remove void labels and reindex valid classes
+                        if len(self.void_classes):
+                            l = l[[x not in self.void_classes for x in l[:, 0]], :]
+                            l[:, 0] = [self.valid_idx[int(i)] for i in l[:, 0]]
                     else:
                         ne += 1  # label empty
                         l = np.zeros((0, 5), dtype=np.float32)
@@ -508,7 +537,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         else:
             # Load image
-            img, (h0, w0), (h, w) = load_image(self, index)
+            sample = load_image(self, index)
+            img = sample['image']
+            (h0, w0) = sample['org_size']
+            (h, w) = sample['size']
 
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
@@ -619,10 +651,30 @@ def load_image(self, index):
         if r != 1:  # always resize down, only resize up if training with augmentation
             interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
             img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
-        return img, (h0, w0), img.shape[:2]  # img, hw_original, hw_resized
+        ret = {'image':img,
+               'org_size':(h0, w0),
+               'size': img.shape[:2]} # img, hw_original, hw_resized
     else:
-        return self.imgs[index], self.img_hw0[index], self.img_hw[index]  # img, hw_original, hw_resized
+        ret = {'image': self.imgs[index],
+               'org_size': self.img_hw0[index],
+               'size': self.img_hw[index]} # img, hw_original, hw_resized
 
+    if self.use_depth:
+        depth = self.depth[index]
+        if depth is None:  # not cached
+            path = self.depth_files[index]
+            depth = cv2.imread(path, cv2.IMREAD_ANYDEPTH)  # BGR
+            assert depth is not None, 'Depth Not Found ' + path
+            h0, w0 = depth.shape[:2]  # orig hw
+            r = self.img_size / max(h0, w0)  # resize image to img_size
+            if r != 1:  # always resize down, only resize up if training with augmentation
+                interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
+                depth = cv2.resize(depth, (int(w0 * r), int(h0 * r)), interpolation=interp)
+                depth = depth.astype(np.float64)
+
+        ret['image'] = np.concatenate((ret['image'], np.expand_dims(depth, 2)), axis=2)
+
+    return ret
 
 def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
     r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
@@ -652,7 +704,9 @@ def load_mosaic(self, index):
     indices = [index] + [self.indices[random.randint(0, self.n - 1)] for _ in range(3)]  # 3 additional image indices
     for i, index in enumerate(indices):
         # Load image
-        img, _, (h, w) = load_image(self, index)
+        sample = load_image(self, index)
+        img = sample['image']
+        (h, w) = sample['size']
 
         # place img in img4
         if i == 0:  # top left
@@ -709,7 +763,9 @@ def load_mosaic9(self, index):
     indices = [index] + [self.indices[random.randint(0, self.n - 1)] for _ in range(8)]  # 8 additional image indices
     for i, index in enumerate(indices):
         # Load image
-        img, _, (h, w) = load_image(self, index)
+        sample = load_image(self, index)
+        img = sample['image']
+        (h, w) = sample['size']
 
         # place img in img9
         if i == 0:  # center

@@ -64,9 +64,32 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         check_dataset(data_dict)  # check
     train_path = data_dict['train']
     test_path = data_dict['val']
+    channels = data_dict['channels']
+
+    if 'img_suffix' in data_dict:
+        img_suffix = data_dict['img_suffix']
+    else:
+        img_suffix = 'image'
+    if 'label_suffix' in data_dict:
+        label_suffix = data_dict['label_suffix']
+    else:
+        label_suffix = 'label'
+    if 'depth_suffix' in data_dict:
+        depth_suffix = data_dict['depth_suffix']
+    else:
+        depth_suffix = 'label'
+
     nc = 1 if opt.single_cls else int(data_dict['nc'])  # number of classes
     names = ['item'] if opt.single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
+    if 'void_classes' in data_dict:
+        void_classes = [int(i) for i in data_dict['void_classes']]
+    else:
+        void_classes = []
+    if 'valid_classes' in data_dict:
+        valid_classes = [int(i) for i in data_dict['valid_classes']]
+    else:
+        valid_classes = range(nc)
 
     # Model
     pretrained = weights.endswith('.pt')
@@ -76,14 +99,14 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         ckpt = torch.load(weights, map_location=device)  # load checkpoint
         if hyp.get('anchors'):
             ckpt['model'].yaml['anchors'] = round(hyp['anchors'])  # force autoanchor
-        model = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc).to(device)  # create
+        model = Model(opt.cfg or ckpt['model'].yaml, ch=channels, nc=nc).to(device)  # create
         exclude = ['anchor'] if opt.cfg or hyp.get('anchors') else []  # exclude keys
         state_dict = ckpt['model'].float().state_dict()  # to FP32
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
     else:
-        model = Model(opt.cfg, ch=3, nc=nc).to(device)  # create
+        model = Model(opt.cfg, ch=channels, nc=nc).to(device)  # create
 
     # Freeze
     freeze = []  # parameter names to freeze (full or partial)
@@ -182,7 +205,9 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
                                             hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
                                             world_size=opt.world_size, workers=opt.workers,
-                                            image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '))
+                                            image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '),
+                                            img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
+                                            void_classes=void_classes, valid_classes=valid_classes)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
@@ -193,7 +218,9 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         testloader = create_dataloader(test_path, imgsz_test, total_batch_size, gs, opt,  # testloader
                                        hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
                                        world_size=opt.world_size, workers=opt.workers,
-                                       pad=0.5, prefix=colorstr('val: '))[0]
+                                       pad=0.5, prefix=colorstr('val: '),
+                                       img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
+                                       void_classes=void_classes, valid_classes=valid_classes)[0]
 
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -315,7 +342,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                 # Plot
                 if plots and ni < 3:
                     f = save_dir / f'train_batch{ni}.jpg'  # filename
-                    Thread(target=plot_images, args=(imgs, targets, paths, f), daemon=True).start()
+                    Thread(target=plot_images, args=(imgs, targets, paths, f, None, channels), daemon=True).start()
                     # if tb_writer:
                     #     tb_writer.add_image(f, result, dataformats='HWC', global_step=epoch)
                     #     tb_writer.add_graph(model, imgs)  # add model to tensorboard

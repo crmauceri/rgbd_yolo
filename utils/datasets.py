@@ -452,10 +452,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 self.img_hw[i] = x['size']
                 gb += self.imgs[i].nbytes
 
-                if self.use_depth:
-                    self.depth = x['depth']
-                    gb += self.depth[i].nbytes
-
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
 
 

@@ -376,6 +376,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
+        self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
 
         # Check cache
         self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels
@@ -402,7 +403,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.label_files = img2label_paths(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
             self.depth_files = img2depth_paths(cache.keys(), img_suffix, depth_suffix)
-        self.test_load()
 
         if single_cls:
             for x in self.labels:
@@ -455,24 +455,23 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
 
-    def test_load(self):
+    def test_load(self, depth_files):
         invalid_idx = set()
         # for ii, path in enumerate(tqdm(self.img_files)):
         #     img = cv2.imread(path)  # BGR
         #     if img is None:
         #         invalid_idx.add(ii)
-
         if self.use_depth:
-            for ii, path in enumerate(tqdm(self.depth_files)):
+            for ii, path in enumerate(tqdm(depth_files)):
                 depth = cv2.imread(path)  # BGR
                 if depth is None:
                     print(path)
                     invalid_idx.add(ii)
 
-            self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
-            self.depth_files = [depth for ii, depth in enumerate(self.depth_files) if ii not in invalid_idx]
+        img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
 
         print('{} unloadable images removed'.format(len(invalid_idx)))
+        return img_files
 
     def cache_labels(self, path=Path('./labels.cache'), prefix=''):
         # Cache dataset labels, check images and read shapes

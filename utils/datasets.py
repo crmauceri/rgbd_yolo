@@ -457,19 +457,15 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
     def test_load(self):
         invalid_idx = set()
-        for ii, img in enumerate(tqdm(self.img_files)):
-            try:
-                load_image_file(self, img)
-            except IOError as e:
-                print(e.message())
+        for ii, path in enumerate(tqdm(self.img_files)):
+            img = cv2.imread(path)  # BGR
+            if img is None:
                 invalid_idx.add(ii)
 
         if self.use_depth:
-            for ii, depth in enumerate(tqdm(self.depth_files)):
-                try:
-                    load_depth_file(self, depth)
-                except IOError as e:
-                    print(e.message())
+            for ii, path in enumerate(tqdm(self.depth_files)):
+                depth = cv2.imread(path)  # BGR
+                if depth is None:
                     invalid_idx.add(ii)
 
         self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]

@@ -457,10 +457,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
     def test_load(self):
         invalid_idx = set()
-        for ii, path in enumerate(tqdm(self.img_files)):
-            img = cv2.imread(path)  # BGR
-            if img is None:
-                invalid_idx.add(ii)
+        # for ii, path in enumerate(tqdm(self.img_files)):
+        #     img = cv2.imread(path)  # BGR
+        #     if img is None:
+        #         invalid_idx.add(ii)
 
         if self.use_depth:
             for ii, path in enumerate(tqdm(self.depth_files)):
@@ -468,8 +468,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if depth is None:
                     invalid_idx.add(ii)
 
-        self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
-        if self.use_depth:
+        # self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
+        # if self.use_depth:
             self.depth_files = [depth for ii, depth in enumerate(self.depth_files) if ii not in invalid_idx]
 
         print('{} unloadable images removed'.format(len(invalid_idx)))
@@ -685,7 +685,7 @@ def load_image(self, index):
     img = self.imgs[index]
     if img is None:  # not cached
         path = self.img_files[index]
-        ret = load_image_file(path)
+        ret = load_image_file(self, path)
     else:
         ret = {'image': self.imgs[index],
                'org_size': self.img_hw0[index],
@@ -695,7 +695,7 @@ def load_image(self, index):
         depth = self.depth[index]
         if depth is None:  # not cached
             path = self.depth_files[index]
-            depth = load_depth_file(path)
+            depth = load_depth_file(self, path)
 
         ret['image'] = np.concatenate((ret['image'], np.expand_dims(depth, 2)), axis=2)
 

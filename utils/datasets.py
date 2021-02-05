@@ -402,7 +402,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.label_files = img2label_paths(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
             self.depth_files = img2depth_paths(cache.keys(), img_suffix, depth_suffix)
-        test_load()
+        self.test_load()
 
         if single_cls:
             for x in self.labels:

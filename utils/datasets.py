@@ -402,6 +402,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.label_files = img2label_paths(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
             self.depth_files = img2depth_paths(cache.keys(), img_suffix, depth_suffix)
+        test_load()
 
         if single_cls:
             for x in self.labels:
@@ -454,6 +455,28 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
 
+    def test_load(self):
+        invalid_idx = set()
+        for ii, img in enumerate(self.img_files):
+            try:
+                load_image_file(self, img)
+            except IOError as e:
+                print(e.message())
+                invalid_idx.add(ii)
+
+        if self.use_depth:
+            for ii, depth in enumerate(self.depth_files):
+                try:
+                    load_depth_file(self, depth)
+                except IOError as e:
+                    print(e.message())
+                    invalid_idx.add(ii)
+
+        self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
+        if self.use_depth:
+            self.depth_files = [depth for ii, depth in enumerate(self.depth_files) if ii not in invalid_idx]
+
+        print('{} unloadable images removed'.format(len(invalid_idx)))
 
     def cache_labels(self, path=Path('./labels.cache'), prefix=''):
         # Cache dataset labels, check images and read shapes
@@ -635,21 +658,38 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
 
 # Ancillary functions --------------------------------------------------------------------------------------------------
+def load_image_file(self, path):
+    img = cv2.imread(path)  # BGR
+    if img is None:
+        raise IOError('cv2.imread failed ' + path)
+    h0, w0 = img.shape[:2]  # orig hw
+    r = self.img_size / max(h0, w0)  # resize image to img_size
+    if r != 1:  # always resize down, only resize up if training with augmentation
+        interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
+        img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
+    ret = {'image': img,
+           'org_size': (h0, w0),
+           'size': img.shape[:2]}
+    return ret
+
+def load_depth_file(self, path):
+    depth = cv2.imread(path, cv2.IMREAD_ANYDEPTH)  # BGR
+    if depth is None:
+        raise IOError('cv2.imread failed ' + path)
+    h0, w0 = depth.shape[:2]  # orig hw
+    r = self.img_size / max(h0, w0)  # resize image to img_size
+    if r != 1:  # always resize down, only resize up if training with augmentation
+        interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
+        depth = cv2.resize(depth, (int(w0 * r), int(h0 * r)), interpolation=interp)
+        depth = depth.astype(np.float64)
+    return depth
+
 def load_image(self, index):
     # loads 1 image from dataset, returns img, original hw, resized hw
     img = self.imgs[index]
     if img is None:  # not cached
         path = self.img_files[index]
-        img = cv2.imread(path)  # BGR
-        assert img is not None, 'Image Not Found ' + path
-        h0, w0 = img.shape[:2]  # orig hw
-        r = self.img_size / max(h0, w0)  # resize image to img_size
-        if r != 1:  # always resize down, only resize up if training with augmentation
-            interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
-            img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
-        ret = {'image':img,
-               'org_size':(h0, w0),
-               'size': img.shape[:2]} # img, hw_original, hw_resized
+        ret = load_image_file(path)
     else:
         ret = {'image': self.imgs[index],
                'org_size': self.img_hw0[index],
@@ -659,14 +699,7 @@ def load_image(self, index):
         depth = self.depth[index]
         if depth is None:  # not cached
             path = self.depth_files[index]
-            depth = cv2.imread(path, cv2.IMREAD_ANYDEPTH)  # BGR
-            assert depth is not None, 'Depth Not Found ' + path
-            h0, w0 = depth.shape[:2]  # orig hw
-            r = self.img_size / max(h0, w0)  # resize image to img_size
-            if r != 1:  # always resize down, only resize up if training with augmentation
-                interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
-                depth = cv2.resize(depth, (int(w0 * r), int(h0 * r)), interpolation=interp)
-                depth = depth.astype(np.float64)
+            depth = load_depth_file(path)
 
         ret['image'] = np.concatenate((ret['image'], np.expand_dims(depth, 2)), axis=2)
 

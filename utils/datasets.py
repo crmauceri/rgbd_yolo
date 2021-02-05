@@ -457,7 +457,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
     def test_load(self):
         invalid_idx = set()
-        for ii, img in enumerate(self.img_files):
+        for ii, img in enumerate(tqdm(self.img_files)):
             try:
                 load_image_file(self, img)
             except IOError as e:
@@ -465,7 +465,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 invalid_idx.add(ii)
 
         if self.use_depth:
-            for ii, depth in enumerate(self.depth_files):
+            for ii, depth in enumerate(tqdm(self.depth_files)):
                 try:
                     load_depth_file(self, depth)
                 except IOError as e:

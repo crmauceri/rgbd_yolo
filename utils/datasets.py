@@ -466,10 +466,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             for ii, path in enumerate(tqdm(self.depth_files)):
                 depth = cv2.imread(path)  # BGR
                 if depth is None:
+                    print(path)
                     invalid_idx.add(ii)
 
-        # self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
-        # if self.use_depth:
+            self.img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
             self.depth_files = [depth for ii, depth in enumerate(self.depth_files) if ii not in invalid_idx]
 
         print('{} unloadable images removed'.format(len(invalid_idx)))

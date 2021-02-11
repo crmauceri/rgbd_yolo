@@ -80,8 +80,6 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         depth_suffix = 'label'
 
     nc = 1 if opt.single_cls else int(data_dict['nc'])  # number of classes
-    names = ['item'] if opt.single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
-    assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
     if 'void_classes' in data_dict:
         void_classes = [int(i) for i in data_dict['void_classes']]
     else:
@@ -90,6 +88,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         valid_classes = [int(i) for i in data_dict['valid_classes']]
     else:
         valid_classes = range(nc)
+
+    assert len(set.intersection(void_classes, valid_classes)) == 0
+
+    names = ['item'] if opt.single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
+    names = [names[i] for i in valid_classes]
+    assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
 
     # Model
     pretrained = weights.endswith('.pt')

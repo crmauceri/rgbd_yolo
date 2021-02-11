@@ -12,9 +12,9 @@ from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from threading import Thread
 
-import cv2
+import cv2, skimage
 import numpy as np
-import torch
+import torch, torchvision
 import torch.nn.functional as F
 from PIL import Image, ExifTags
 from torch.utils.data import Dataset
@@ -343,7 +343,7 @@ def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
     return [x.replace(img_suffix, depth_suffix).replace('.' + x.split('.')[-1], '.png') for x in img_paths]
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
-    def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
+    def __init__(self, path, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='',
                  img_suffix='image', label_suffix='label', depth_suffix='depth',
                  void_classes=[], valid_classes=[], use_depth=True):
@@ -376,7 +376,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
+        #self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
+
+        self.img_files = self.img_files[:10]
 
         # Check cache
         self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels
@@ -573,21 +575,39 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
 
         if self.augment:
-            # Augment imagespace
-            if not mosaic:
-                img, labels = random_perspective(img, labels,
-                                                 degrees=hyp['degrees'],
-                                                 translate=hyp['translate'],
-                                                 scale=hyp['scale'],
-                                                 shear=hyp['shear'],
-                                                 perspective=hyp['perspective'])
+            rgb = Image.fromarray(img[:, :, :3])
 
-            # Augment colorspace
-            augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
+            # Darken Image
+            gamma = 1.0 + random.random() * 1.2
+            gain = 1 - random.random() / 2.0
+            rgb = torchvision.transforms.functional.adjust_gamma(rgb, gamma, gain)
+
+            # Add noise
+            rgb_array = np.array(rgb).astype(np.float32) / 255.
+
+            # Shot noise, proportional to number of photons measured
+            rgb_array = skimage.util.random_noise(rgb_array, mode='poisson', clip=True)
+            # Temperature noise, constant for sensor at temperature
+            rgb_array = skimage.util.random_noise(rgb_array, mode='gaussian', var=0.01, clip=True)
+            rgb_array = (rgb_array * 255).astype(np.uint8)
+
+            # Augment imagespace
+            # if not mosaic:
+            #     img, labels = random_perspective(img, labels,
+            #                                      degrees=hyp['degrees'],
+            #                                      translate=hyp['translate'],
+            #                                      scale=hyp['scale'],
+            #                                      shear=hyp['shear'],
+            #                                      perspective=hyp['perspective'])
+            #
+            # # Augment colorspace
+            # augment_hsv(rgb, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
             # Apply cutouts
             # if random.random() < 0.9:
             #     labels = cutout(img, labels)
+
+            img[:, :, :3] = rgb_array
 
         nL = len(labels)  # number of labels
         if nL:

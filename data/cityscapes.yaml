@@ -25,7 +25,7 @@ names: [ 'unlabeled', 'ego vehicle', 'rectification border', 'out of roi', 'stat
          'road', 'sidewalk', 'parking' , 'rail track', \
          'building', 'wall', 'fence', 'guard rail',  'bridge',  'tunnel', \
          'pole', 'polegroup', 'traffic_light', 'traffic_sign', \
-         'vegetation', 'terrain', 'sky' \
+         'vegetation', 'terrain', 'sky', \
          'person', 'rider', 'car', 'truck', 'bus', 'caravan', 'trailer', 'train', \
          'motorcycle', 'bicycle', 'license plate' ] # License plate is actually -1
 

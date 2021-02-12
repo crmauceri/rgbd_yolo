@@ -89,7 +89,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     else:
         valid_classes = range(nc)
 
-    assert len(set.intersection(void_classes, valid_classes)) == 0
+    assert len(set.intersection(set(void_classes), set(valid_classes))) == 0
 
     names = ['item'] if opt.single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     names = [names[i] for i in valid_classes]

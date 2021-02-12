@@ -378,8 +378,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
         #self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
 
-        self.img_files = self.img_files[:10]
-
         # Check cache
         self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels
         cache_path = Path(self.label_files[0]).parent.with_suffix('.cache')  # cached labels

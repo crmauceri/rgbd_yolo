@@ -77,7 +77,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     if 'depth_suffix' in data_dict:
         depth_suffix = data_dict['depth_suffix']
     else:
-        depth_suffix = 'label'
+        depth_suffix = 'depth'
 
     nc = 1 if opt.single_cls else int(data_dict['nc'])  # number of classes
     if 'void_classes' in data_dict:

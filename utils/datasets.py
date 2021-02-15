@@ -340,7 +340,8 @@ def img2label_paths(img_paths, img_suffix='images', label_suffix='labels'):
 
 def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
     # Define depth paths as a function of image paths # /images/, /depth/ substrings
-    return [x.replace(img_suffix, depth_suffix).replace('.' + x.split('.')[-1], '.png') for x in img_paths]
+    result = [depth_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
+    return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
@@ -376,7 +377,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        #self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
+        self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
+        #self.img_files = self.img_files[:100]
 
         # Check cache
         self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels

@@ -88,6 +88,10 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         valid_classes = [int(i) for i in data_dict['valid_classes']]
     else:
         valid_classes = range(nc)
+    if 'root' in data_dict:
+        root = data_dict['root']
+    else:
+        root = ''
 
     assert len(set.intersection(set(void_classes), set(valid_classes))) == 0
 
@@ -206,7 +210,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank)
 
     # Trainloader
-    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
+    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt, root=root,
                                             hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
                                             world_size=opt.world_size, workers=opt.workers,
                                             image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '),

@@ -55,12 +55,12 @@ def exif_size(img):
     return s
 
 
-def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=False, cache=False, pad=0.0, rect=False,
+def create_dataloader(path, imgsz, batch_size, stride, opt, root='', hyp=None, augment=False, cache=False, pad=0.0, rect=False,
                       rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix='',
                       img_suffix='image', label_suffix='label', depth_suffix='depth', void_classes=[], valid_classes=[]):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
-        dataset = LoadImagesAndLabels(path, imgsz, batch_size,
+        dataset = LoadImagesAndLabels(path, root, imgsz, batch_size,
                                       augment=augment,  # augment images
                                       hyp=hyp,  # augmentation hyperparameters
                                       rect=rect,  # rectangular training
@@ -336,7 +336,8 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
 def img2label_paths(img_paths, img_suffix='images', label_suffix='labels'):
     # Define label paths as a function of image paths # /images/, /labels/ substrings
-    return [x.replace(img_suffix, label_suffix).replace('.' + x.split('.')[-1], '.txt') for x in img_paths]
+    result = [label_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
+    return [x.replace('.' + x.split('.')[-1], '.txt') for x in result]
 
 def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
     # Define depth paths as a function of image paths # /images/, /depth/ substrings
@@ -344,7 +345,7 @@ def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
     return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
-    def __init__(self, path, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
+    def __init__(self, path, root, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='',
                  img_suffix='image', label_suffix='label', depth_suffix='depth',
                  void_classes=[], valid_classes=[], use_depth=True):
@@ -374,6 +375,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 else:
                     raise Exception(f'{prefix}{p} does not exist')
             self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in img_formats])
+            self.img_files = [root + x for x in self.img_files]
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')

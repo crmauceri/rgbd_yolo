@@ -350,7 +350,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                 # Plot
                 if plots and ni < 3:
                     f = save_dir / f'train_batch{ni}.jpg'  # filename
-                    Thread(target=plot_images, args=(imgs, targets, paths, f, None, channels), daemon=True).start()
+                    Thread(target=plot_images, args=(imgs, targets, paths, f, None), daemon=True).start()
                     # if tb_writer:
                     #     tb_writer.add_image(f, result, dataformats='HWC', global_step=epoch)
                     #     tb_writer.add_graph(model, imgs)  # add model to tensorboard

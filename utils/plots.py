@@ -97,7 +97,7 @@ def output_to_target(output):
     return np.array(targets)
 
 
-def plot_images(images, targets, paths=None, fname='images.jpg', names=None, channels=3, max_size=640, max_subplots=16):
+def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=640, max_subplots=16):
     # Plot image grid with labels
 
     if isinstance(images, torch.Tensor):
@@ -122,7 +122,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, cha
         w = math.ceil(scale_factor * w)
 
     colors = color_list()  # list of colors
-    mosaic = np.full((int(ns * h), int(ns * w), channels), 255, dtype=np.float32)  # init
+    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.float32)  # init
     for i, img in enumerate(images):
         if i == max_subplots:  # if last batch has fewer images than we expect
             break

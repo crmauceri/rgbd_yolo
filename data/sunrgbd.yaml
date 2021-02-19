@@ -10,7 +10,7 @@
 train: datasets/SUNRGBD/image_list_train.txt
 val: datasets/SUNRGBD/image_list_val.txt
 root: datasets/SUNRGBD/images/
-channels: 3
+channels: 4
 
 img_suffix: image
 label_suffix: bbox

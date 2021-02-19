@@ -336,12 +336,12 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
 def img2label_paths(img_paths, img_suffix='images', label_suffix='labels'):
     # Define label paths as a function of image paths # /images/, /labels/ substrings
-    result = [label_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
+    result = [s.replace(img_suffix, label_suffix) for s in img_paths]
     return [x.replace('.' + x.split('.')[-1], '.txt') for x in result]
 
 def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
     # Define depth paths as a function of image paths # /images/, /depth/ substrings
-    result = [depth_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
+    result = [s.replace(img_suffix, depth_suffix) for s in img_paths]
     return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
 
 class LoadImagesAndLabels(Dataset):  # for training/testing

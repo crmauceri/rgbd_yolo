@@ -65,6 +65,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     train_path = data_dict['train']
     test_path = data_dict['val']
     channels = data_dict['channels']
+    dataset = data_dict['dataset']
 
     if 'img_suffix' in data_dict:
         img_suffix = data_dict['img_suffix']
@@ -215,7 +216,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                             world_size=opt.world_size, workers=opt.workers,
                                             image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '),
                                             img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
-                                            void_classes=void_classes, valid_classes=valid_classes)
+                                            void_classes=void_classes, valid_classes=valid_classes, dataset=dataset)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
@@ -228,7 +229,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                        world_size=opt.world_size, workers=opt.workers,
                                        pad=0.5, prefix=colorstr('val: '),
                                        img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
-                                       void_classes=void_classes, valid_classes=valid_classes)[0]
+                                       void_classes=void_classes, valid_classes=valid_classes, dataset=dataset)[0]
 
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)

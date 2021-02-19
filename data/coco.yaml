@@ -4,7 +4,7 @@
 #   /parent_folder
 #     /coco
 #     /yolov5
-
+dataset: coco
 
 # download command/URL (optional)
 download: bash data/scripts/get_coco.sh

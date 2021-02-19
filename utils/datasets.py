@@ -20,7 +20,7 @@ from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from utils.general import xyxy2xywh, xywh2xyxy, clean_str
+from utils.general import xyxy2xywh, clean_str
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -57,7 +57,7 @@ def exif_size(img):
 
 def create_dataloader(path, imgsz, batch_size, stride, opt, root='', hyp=None, augment=False, cache=False, pad=0.0, rect=False,
                       rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix='',
-                      img_suffix='image', label_suffix='label', depth_suffix='depth', void_classes=[], valid_classes=[]):
+                      img_suffix='image', label_suffix='label', depth_suffix='depth', void_classes=[], valid_classes=[], dataset='cityscapes'):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, root, imgsz, batch_size,
@@ -74,7 +74,8 @@ def create_dataloader(path, imgsz, batch_size, stride, opt, root='', hyp=None, a
                                       label_suffix=label_suffix,
                                       depth_suffix=depth_suffix,
                                       void_classes=void_classes,
-                                      valid_classes=valid_classes)
+                                      valid_classes=valid_classes,
+                                      dataset=dataset)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // world_size, batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -334,21 +335,11 @@ class LoadStreams:  # multiple IP or RTSP cameras
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-def img2label_paths(img_paths, img_suffix='images', label_suffix='labels'):
-    # Define label paths as a function of image paths # /images/, /labels/ substrings
-    result = [s.replace(img_suffix, label_suffix) for s in img_paths]
-    return [x.replace('.' + x.split('.')[-1], '.txt') for x in result]
-
-def img2depth_paths(img_paths, img_suffix='images', depth_suffix='depth'):
-    # Define depth paths as a function of image paths # /images/, /depth/ substrings
-    result = [s.replace(img_suffix, depth_suffix) for s in img_paths]
-    return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
-
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, root, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='',
                  img_suffix='image', label_suffix='label', depth_suffix='depth',
-                 void_classes=[], valid_classes=[], use_depth=True):
+                 void_classes=[], valid_classes=[], use_depth=True, dataset='cityscapes'):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -360,6 +351,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.void_classes = void_classes
         self.valid_idx = dict(zip(valid_classes, range(len(valid_classes))))
         self.use_depth = use_depth
+        self.dataset = dataset
 
         try:
             f = []  # image files
@@ -379,11 +371,11 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        self.img_files = self.test_load(img2depth_paths(self.img_files, img_suffix, depth_suffix))
+        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix))
         #self.img_files = self.img_files[:100]
 
         # Check cache
-        self.label_files = img2label_paths(self.img_files, img_suffix, label_suffix)  # labels
+        self.label_files = self.replace_suffix(self.img_files, img_suffix, label_suffix)  # labels
         cache_path = Path(path).with_suffix('.cache')  # cached labels
         if cache_path.is_file():
             cache = torch.load(cache_path)  # load
@@ -404,9 +396,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.labels = list(labels)
         self.shapes = np.array(shapes, dtype=np.float64)
         self.img_files = list(cache.keys())  # update
-        self.label_files = img2label_paths(cache.keys(), img_suffix, label_suffix) # update
+        self.label_files = self.replace_suffix(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
-            self.depth_files = img2depth_paths(cache.keys(), img_suffix, depth_suffix)
+            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix)
 
         if single_cls:
             for x in self.labels:
@@ -458,6 +450,14 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 gb += self.imgs[i].nbytes
 
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
+
+    def replace_suffix(self, img_paths, img_suffix='images', new_suffix='depth'):
+        # Define depth paths as a function of image paths # /images/, /depth/ substrings
+        if self.dataset == 'sunrgbd':
+            result = [new_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
+        else:
+            result = [s.replace(img_suffix, new_suffix) for s in img_paths]
+        return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
 
     def test_load(self, depth_files):
         invalid_idx = set()
@@ -1083,39 +1083,39 @@ def flatten_recursive(path='../coco128'):
         shutil.copyfile(file, new_path / Path(file).name)
 
 
-def extract_boxes(path='../coco128/'):  # from utils.datasets import *; extract_boxes('../coco128')
-    # Convert detection dataset into classification dataset, with one directory per class
-
-    path = Path(path)  # images dir
-    shutil.rmtree(path / 'classifier') if (path / 'classifier').is_dir() else None  # remove existing
-    files = list(path.rglob('*.*'))
-    n = len(files)  # number of files
-    for im_file in tqdm(files, total=n):
-        if im_file.suffix[1:] in img_formats:
-            # image
-            im = cv2.imread(str(im_file))[..., ::-1]  # BGR to RGB
-            h, w = im.shape[:2]
-
-            # labels
-            lb_file = Path(img2label_paths([str(im_file)])[0])
-            if Path(lb_file).exists():
-                with open(lb_file, 'r') as f:
-                    lb = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
-
-                for j, x in enumerate(lb):
-                    c = int(x[0])  # class
-                    f = (path / 'classifier') / f'{c}' / f'{path.stem}_{im_file.stem}_{j}.jpg'  # new filename
-                    if not f.parent.is_dir():
-                        f.parent.mkdir(parents=True)
-
-                    b = x[1:] * [w, h, w, h]  # box
-                    # b[2:] = b[2:].max()  # rectangle to square
-                    b[2:] = b[2:] * 1.2 + 3  # pad
-                    b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
-
-                    b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
-                    b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
-                    assert cv2.imwrite(str(f), im[b[1]:b[3], b[0]:b[2]]), f'box failure in {f}'
+# def extract_boxes(path='../coco128/'):  # from utils.datasets import *; extract_boxes('../coco128')
+#     # Convert detection dataset into classification dataset, with one directory per class
+#
+#     path = Path(path)  # images dir
+#     shutil.rmtree(path / 'classifier') if (path / 'classifier').is_dir() else None  # remove existing
+#     files = list(path.rglob('*.*'))
+#     n = len(files)  # number of files
+#     for im_file in tqdm(files, total=n):
+#         if im_file.suffix[1:] in img_formats:
+#             # image
+#             im = cv2.imread(str(im_file))[..., ::-1]  # BGR to RGB
+#             h, w = im.shape[:2]
+#
+#             # labels
+#             lb_file = Path(img2label_paths([str(im_file)])[0])
+#             if Path(lb_file).exists():
+#                 with open(lb_file, 'r') as f:
+#                     lb = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
+#
+#                 for j, x in enumerate(lb):
+#                     c = int(x[0])  # class
+#                     f = (path / 'classifier') / f'{c}' / f'{path.stem}_{im_file.stem}_{j}.jpg'  # new filename
+#                     if not f.parent.is_dir():
+#                         f.parent.mkdir(parents=True)
+#
+#                     b = x[1:] * [w, h, w, h]  # box
+#                     # b[2:] = b[2:].max()  # rectangle to square
+#                     b[2:] = b[2:] * 1.2 + 3  # pad
+#                     b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
+#
+#                     b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
+#                     b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
+#                     assert cv2.imwrite(str(f), im[b[1]:b[3], b[0]:b[2]]), f'box failure in {f}'
 
 
 def autosplit(path='../coco128', weights=(0.9, 0.1, 0.0)):  # from utils.datasets import *; autosplit('../coco128')

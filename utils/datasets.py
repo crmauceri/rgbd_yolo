@@ -371,7 +371,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix))
+        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix, '.png'))
         #self.img_files = self.img_files[:100]
 
         # Check cache
@@ -398,7 +398,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.img_files = list(cache.keys())  # update
         self.label_files = self.replace_suffix(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
-            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix)
+            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix, '.png')
 
         if single_cls:
             for x in self.labels:
@@ -451,14 +451,13 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
 
-    def replace_suffix(self, img_paths, img_suffix='images', new_suffix='depth'):
+    def replace_suffix(self, img_paths, img_suffix='images', new_suffix='depth', ext='txt'):
         # Define depth paths as a function of image paths # /images/, /depth/ substrings
         if self.dataset == 'sunrgbd':
             result = [new_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
         else:
             result = [s.replace(img_suffix, new_suffix) for s in img_paths]
-        print(result[0])
-        return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
+        return [x.replace('.' + x.split('.')[-1], ext) for x in result]
 
     def test_load(self, depth_files):
         invalid_idx = set()

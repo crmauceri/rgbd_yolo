@@ -457,6 +457,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             result = [new_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
         else:
             result = [s.replace(img_suffix, new_suffix) for s in img_paths]
+        print(result[0])
         return [x.replace('.' + x.split('.')[-1], '.png') for x in result]
 
     def test_load(self, depth_files):

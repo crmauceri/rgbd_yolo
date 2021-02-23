@@ -104,9 +104,9 @@ def check_file(file):
         return files[0]  # return file
 
 
-def check_dataset(dict):
+def check_dataset(cfg):
     # Download dataset if not found locally
-    val, s = dict.get('val'), dict.get('download')
+    val, s = cfg.val, cfg.download
     if val and len(val):
         val = [Path(x).resolve() for x in (val if isinstance(val, list) else [val])]  # val path
         if not all(x.exists() for x in val):

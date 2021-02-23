@@ -60,45 +60,19 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     plots = not opt.evolve  # create plots
     cuda = device.type != 'cpu'
     init_seeds(2 + rank)
-    with open(opt.data) as f:
-        data_dict = yaml.load(f, Loader=yaml.SafeLoader)  # data dict
     with torch_distributed_zero_first(rank):
-        check_dataset(data_dict)  # check
-    train_path = data_dict['train']
-    test_path = data_dict['val']
-    channels = data_dict['channels']
-    dataset = data_dict['dataset']
+        check_dataset(opt.DATASET)  # check
 
-    if 'img_suffix' in data_dict:
-        img_suffix = data_dict['img_suffix']
-    else:
-        img_suffix = 'image'
-    if 'label_suffix' in data_dict:
-        label_suffix = data_dict['label_suffix']
-    else:
-        label_suffix = 'label'
-    if 'depth_suffix' in data_dict:
-        depth_suffix = data_dict['depth_suffix']
-    else:
-        depth_suffix = 'depth'
-
-    nc = 1 if opt.single_cls else int(data_dict['nc'])  # number of classes
-    if 'void_classes' in data_dict:
-        void_classes = [int(i) for i in data_dict['void_classes']]
-    else:
-        void_classes = []
-    if 'valid_classes' in data_dict:
-        valid_classes = [int(i) for i in data_dict['valid_classes']]
+    nc = 1 if opt.single_cls else int(opt.DATASET.nc)  # number of classes
+    void_classes = [int(i) for i in opt.DATASET.void_classes]
+    if len(opt.DATASET.valid_classes) > 0:
+        valid_classes = [int(i) for i in opt.DATASET.valid_classes]
     else:
         valid_classes = range(nc)
-    if 'root' in data_dict:
-        root = data_dict['root']
-    else:
-        root = ''
 
     assert len(set.intersection(set(void_classes), set(valid_classes))) == 0
 
-    names = ['item'] if opt.single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
+    names = ['item'] if opt.single_cls and len(opt.DATASET.names) != 1 else opt.DATASET.names  # class names
     names = [names[i] for i in valid_classes]
     assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
 
@@ -110,14 +84,14 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         ckpt = torch.load(weights, map_location=device)  # load checkpoint
         if hyp.get('anchors'):
             ckpt['model'].yaml['anchors'] = round(hyp['anchors'])  # force autoanchor
-        model = Model(opt.cfg or ckpt['model'].yaml, ch=channels, nc=nc).to(device)  # create
+        model = Model(opt.cfg or ckpt['model'].yaml, ch=opt.DATASET.channels, nc=nc).to(device)  # create
         exclude = ['anchor'] if opt.cfg or hyp.get('anchors') else []  # exclude keys
         state_dict = ckpt['model'].float().state_dict()  # to FP32
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
     else:
-        model = Model(opt.cfg, ch=channels, nc=nc).to(device)  # create
+        model = Model(opt.cfg, ch=opt.DATASET.channels, nc=nc).to(device)  # create
 
     # Freeze
     freeze = []  # parameter names to freeze (full or partial)
@@ -160,7 +134,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
     # Logging
     if rank in [-1, 0] and wandb and wandb.run is None:
-        opt.hyp = hyp  # add hyperparameters
+        #opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
                                project='YOLOv5' if opt.project == 'runs/train' else Path(opt.project).stem,
                                name=save_dir.stem,
@@ -213,12 +187,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank)
 
     # Trainloader
-    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt, root=root,
+    dataloader, dataset = create_dataloader(opt.DATASET.train, imgsz, batch_size, gs, opt, root=opt.DATASET.root,
                                             hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
                                             world_size=opt.world_size, workers=opt.workers,
                                             image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '),
-                                            img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
-                                            void_classes=void_classes, valid_classes=valid_classes, dataset=dataset)
+                                            img_suffix=opt.DATASET.img_suffix, label_suffix=opt.DATASET.label_suffix, depth_suffix=opt.DATASET.depth_suffix,
+                                            void_classes=void_classes, valid_classes=valid_classes, dataset=opt.DATASET.dataset)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
@@ -226,12 +200,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # Process 0
     if rank in [-1, 0]:
         ema.updates = start_epoch * nb // accumulate  # set EMA updates
-        testloader = create_dataloader(test_path, imgsz_test, total_batch_size, gs, opt, root=root,  # testloader
+        testloader = create_dataloader(opt.DATASET.val, imgsz_test, total_batch_size, gs, opt, root=opt.DATASET.root,  # testloader
                                        hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
                                        world_size=opt.world_size, workers=opt.workers,
                                        pad=0.5, prefix=colorstr('val: '),
-                                       img_suffix=img_suffix, label_suffix=label_suffix, depth_suffix=depth_suffix,
-                                       void_classes=void_classes, valid_classes=valid_classes, dataset=dataset)[0]
+                                       img_suffix=opt.DATASET.img_suffix, label_suffix=opt.DATASET.label_suffix, depth_suffix=opt.DATASET.depth_suffix,
+                                       void_classes=void_classes, valid_classes=valid_classes, dataset=opt.DATASET.dataset)[0]
 
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -549,7 +523,7 @@ if __name__ == '__main__':
                 'obj_pw': (1, 0.5, 2.0),  # obj BCELoss positive_weight
                 'iou_t': (0, 0.1, 0.7),  # IoU training threshold
                 'anchor_t': (1, 2.0, 8.0),  # anchor-multiple threshold
-                'anchors': (2, 2.0, 10.0),  # anchors per output grid (0 to ignore)
+                #'anchors': (2, 2.0, 10.0),  # anchors per output grid (0 to ignore)
                 'fl_gamma': (0, 0.0, 2.0),  # focal loss gamma (efficientDet default gamma=1.5)
                 'hsv_h': (1, 0.0, 0.1),  # image HSV-Hue augmentation (fraction)
                 'hsv_s': (1, 0.0, 0.9),  # image HSV-Saturation augmentation (fraction)

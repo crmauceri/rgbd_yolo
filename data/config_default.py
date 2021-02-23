@@ -1,4 +1,4 @@
-from yacs.config import CNode as CN
+from yacs.config import CfgNode as CN
 from utils.general import increment_path, check_file
 import torch, os
 from pathlib import Path

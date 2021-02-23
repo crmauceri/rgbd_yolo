@@ -451,7 +451,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB)'
 
-    def replace_suffix(self, img_paths, img_suffix='images', new_suffix='depth', ext='txt'):
+    def replace_suffix(self, img_paths, img_suffix='images', new_suffix='depth', ext='.txt'):
         # Define depth paths as a function of image paths # /images/, /depth/ substrings
         if self.dataset == 'sunrgbd':
             result = [new_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]

@@ -8,9 +8,12 @@ _C = CN()
 _C.weights = 'yolov5s.pt' #initial weights path
 _C.cfg = ''  #'model.yaml path
 _C.hyp = 'data/hyp.scratch.yaml'  #'hyperparameters path
-_C.epochs = 300
-_C.batch_size = 16  #'total batch size for all GPUs
-_C.img_size = [640, 640]  #'[train, test] image sizes
+
+_C.TRAIN = CN()
+_C.TRAIN.epochs = 300
+_C.TRAIN.batch_size = 16  #'total batch size for all GPUs
+_C.TRAIN.augment = True
+
 _C.rect = False  #'rectangular training
 _C.resume = False  #'resume most recent training
 _C.nosave = False  #'only save final checkpoint
@@ -43,6 +46,7 @@ _C.DATASET.train = 'datasets/cityscapes/leftImg8bit/train_extra/'
 _C.DATASET.val = 'datasets/cityscapes/leftImg8bit/val/'
 _C.DATASET.root = ''
 _C.DATASET.channels = 4
+_C.DATASET.img_size = [640, 640]  #'[train, test] image sizes
 
 _C.DATASET.img_suffix = 'image'
 _C.DATASET.label_suffix = 'label'
@@ -70,12 +74,12 @@ def get_cfg_defaults():
   C.world_size = int(os.environ['WORLD_SIZE']) if 'WORLD_SIZE' in os.environ else 1
   C.global_rank = int(os.environ['RANK']) if 'RANK' in os.environ else -1
 
-  C.img_size.extend([C.img_size[-1]] * (2 - len(C.img_size)))  # extend to 2 sizes (train, test)
+  C.DATASET.img_size.extend([C.DATASET.img_size[-1]] * (2 - len(C.DATASET.img_size)))  # extend to 2 sizes (train, test)
   C.name = 'evolve' if C.evolve else C.name
   C.save_dir = increment_path(Path(C.project) / C.name, exist_ok =C.exist_ok | C.evolve)  # increment run
 
-  C.total_batch_size = C.batch_size
-  assert C.batch_size % C.world_size == 0, '--batch-size must be multiple of CUDA device count'
-  C.batch_size = C.total_batch_size // C.world_size
+  C.TRAIN.total_batch_size = C.TRAIN.batch_size
+  assert C.TRAIN.batch_size % C.world_size == 0, '--batch-size must be multiple of CUDA device count'
+  C.TRAIN.batch_size = C.TRAIN.total_batch_size // C.world_size
 
   return C

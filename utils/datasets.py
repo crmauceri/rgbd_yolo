@@ -55,39 +55,39 @@ def exif_size(img):
     return s
 
 
-def create_dataloader(path, imgsz, batch_size, stride, opt, root='', hyp=None, augment=False, cache=False, pad=0.0, rect=False,
-                      rank=-1, world_size=1, workers=8, image_weights=False, quad=False, prefix='',
-                      img_suffix='image', label_suffix='label', depth_suffix='depth', void_classes=[], valid_classes=[], dataset='cityscapes'):
+def create_dataloader(opt, imgsz, stride, hyp=None, pad=0.0, prefix='',
+                      void_classes=[], valid_classes=[], cache=False, rect=False, rank=-1):
+
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
-        dataset = LoadImagesAndLabels(path, root, imgsz, batch_size,
-                                      augment=augment,  # augment images
+        dataset = LoadImagesAndLabels(opt.DATASET.train, opt.DATASET.root, imgsz, opt.TRAIN.batch_size,
+                                      augment=opt.TRAIN.augment,  # augment images
                                       hyp=hyp,  # augmentation hyperparameters
                                       rect=rect,  # rectangular training
                                       cache_images=cache,
                                       single_cls=opt.single_cls,
                                       stride=int(stride),
                                       pad=pad,
-                                      image_weights=image_weights,
+                                      image_weights=opt.image_weights,
                                       prefix=prefix,
-                                      img_suffix=img_suffix,
-                                      label_suffix=label_suffix,
-                                      depth_suffix=depth_suffix,
+                                      img_suffix=opt.DATASET.img_suffix,
+                                      label_suffix=opt.DATASET.label_suffix,
+                                      depth_suffix=opt.DATASET.depth_suffix,
                                       void_classes=void_classes,
                                       valid_classes=valid_classes,
-                                      dataset=dataset)
+                                      dataset=opt.DATASET.dataset)
 
-    batch_size = min(batch_size, len(dataset))
-    nw = min([os.cpu_count() // world_size, batch_size if batch_size > 1 else 0, workers])  # number of workers
+    batch_size = min(opt.TRAIN.batch_size, len(dataset))
+    nw = min([os.cpu_count() // opt.world_size, batch_size if batch_size > 1 else 0, opt.workers])  # number of workers
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if rank != -1 else None
-    loader = torch.utils.data.DataLoader if image_weights else InfiniteDataLoader
+    loader = torch.utils.data.DataLoader if opt.image_weights else InfiniteDataLoader
     # Use torch.utils.data.DataLoader() if dataset.properties will update during training else InfiniteDataLoader()
     dataloader = loader(dataset,
                         batch_size=batch_size,
                         num_workers=nw,
                         sampler=sampler,
                         pin_memory=True,
-                        collate_fn=LoadImagesAndLabels.collate_fn4 if quad else LoadImagesAndLabels.collate_fn)
+                        collate_fn=LoadImagesAndLabels.collate_fn4 if opt.quad else LoadImagesAndLabels.collate_fn)
     return dataloader, dataset
 
 

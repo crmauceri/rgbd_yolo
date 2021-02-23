@@ -67,11 +67,9 @@ def test(data,
 
     # Configure
     model.eval()
-    is_coco = data.endswith('coco.yaml')  # is COCO dataset
-    with open(data) as f:
-        data = yaml.load(f, Loader=yaml.SafeLoader)  # model dict
     check_dataset(data)  # check
-    nc = 1 if single_cls else int(data['nc'])  # number of classes
+    nc = 1 if single_cls else int(data.nc)  # number of classes
+    is_coco = data.dataset == 'coco'
     iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
     niou = iouv.numel()
 
@@ -86,9 +84,9 @@ def test(data,
     if not training:
         img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
         _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
-        path = data['test'] if opt.task == 'test' else data['val']  # path to val/test images
+        path = data.test if opt.task == 'test' else data.val  # path to val/test images
         dataloader = create_dataloader(path, imgsz, batch_size, model.stride.max(), opt, pad=0.5, rect=True,
-                                       prefix=colorstr('test: ' if opt.task == 'test' else 'val: '), dataset=data['dataset'])[0]
+                                       prefix=colorstr('test: ' if opt.task == 'test' else 'val: '), dataset=data.dataset)[0]
 
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)

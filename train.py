@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 def train(hyp, opt, device, tb_writer=None, wandb=None):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
-    save_dir, epochs, batch_size, total_batch_size, weights, rank = \
-        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
+    save_dir = Path(opt.save_dir)
+    epochs = opt.TRAIN.epochs
 
     # Directories
     wdir = save_dir / 'weights'
@@ -59,8 +59,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # Configure
     plots = not opt.evolve  # create plots
     cuda = device.type != 'cpu'
-    init_seeds(2 + rank)
-    with torch_distributed_zero_first(rank):
+    init_seeds(2 + opt.global_rank)
+    with torch_distributed_zero_first(opt.global_rank):
         check_dataset(opt.DATASET)  # check
 
     nc = 1 if opt.single_cls else int(opt.DATASET.nc)  # number of classes
@@ -77,11 +77,11 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
 
     # Model
-    pretrained = weights.endswith('.pt')
+    pretrained = opt.weights.endswith('.pt')
     if pretrained:
-        with torch_distributed_zero_first(rank):
-            attempt_download(weights)  # download if not found locally
-        ckpt = torch.load(weights, map_location=device)  # load checkpoint
+        with torch_distributed_zero_first(opt.global_rank):
+            attempt_download(opt.weights)  # download if not found locally
+        ckpt = torch.load(opt.weights, map_location=device)  # load checkpoint
         if hyp.get('anchors'):
             ckpt['model'].yaml['anchors'] = round(hyp['anchors'])  # force autoanchor
         model = Model(opt.cfg or ckpt['model'].yaml, ch=opt.DATASET.channels, nc=nc).to(device)  # create
@@ -89,7 +89,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         state_dict = ckpt['model'].float().state_dict()  # to FP32
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
-        logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
+        logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), opt.weights))  # report
     else:
         model = Model(opt.cfg, ch=opt.DATASET.channels, nc=nc).to(device)  # create
 
@@ -103,8 +103,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
     # Optimizer
     nbs = 64  # nominal batch size
-    accumulate = max(round(nbs / total_batch_size), 1)  # accumulate loss before optimizing
-    hyp['weight_decay'] *= total_batch_size * accumulate / nbs  # scale weight_decay
+    accumulate = max(round(nbs / opt.TRAIN.total_batch_size), 1)  # accumulate loss before optimizing
+    hyp['weight_decay'] *= opt.TRAIN.total_batch_size * accumulate / nbs  # scale weight_decay
     logger.info(f"Scaled weight_decay = {hyp['weight_decay']}")
 
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
@@ -133,7 +133,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # plot_lr_scheduler(optimizer, scheduler, epochs)
 
     # Logging
-    if rank in [-1, 0] and wandb and wandb.run is None:
+    if opt.global_rank in [-1, 0] and wandb and wandb.run is None:
         #opt.hyp = hyp  # add hyperparameters
         wandb_run = wandb.init(config=opt, resume="allow",
                                project='YOLOv5' if opt.project == 'runs/train' else Path(opt.project).stem,
@@ -157,10 +157,10 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         # Epochs
         start_epoch = ckpt['epoch'] + 1
         if opt.resume:
-            assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
+            assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (opt.weights, epochs)
         if epochs < start_epoch:
             logger.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
-                        (weights, ckpt['epoch'], epochs))
+                        (opt.weights, ckpt['epoch'], epochs))
             epochs += ckpt['epoch']  # finetune additional epochs
 
         del ckpt, state_dict
@@ -168,44 +168,38 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # Image sizes
     gs = int(model.stride.max())  # grid size (max stride)
     nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
-    imgsz, imgsz_test = [check_img_size(x, gs) for x in opt.img_size]  # verify imgsz are gs-multiples
+    imgsz, imgsz_test = [check_img_size(x, gs) for x in opt.DATASET.img_size]  # verify imgsz are gs-multiples
 
     # DP mode
-    if cuda and rank == -1 and torch.cuda.device_count() > 1:
+    if cuda and opt.global_rank == -1 and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
 
     # SyncBatchNorm
-    if opt.sync_bn and cuda and rank != -1:
+    if opt.sync_bn and cuda and opt.global_rank != -1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
         logger.info('Using SyncBatchNorm()')
 
     # EMA
-    ema = ModelEMA(model) if rank in [-1, 0] else None
+    ema = ModelEMA(model) if opt.global_rank in [-1, 0] else None
 
     # DDP mode
-    if cuda and rank != -1:
+    if cuda and opt.global_rank != -1:
         model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank)
 
     # Trainloader
-    dataloader, dataset = create_dataloader(opt.DATASET.train, imgsz, batch_size, gs, opt, root=opt.DATASET.root,
-                                            hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
-                                            world_size=opt.world_size, workers=opt.workers,
-                                            image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '),
-                                            img_suffix=opt.DATASET.img_suffix, label_suffix=opt.DATASET.label_suffix, depth_suffix=opt.DATASET.depth_suffix,
-                                            void_classes=void_classes, valid_classes=valid_classes, dataset=opt.DATASET.dataset)
+    dataloader, dataset = create_dataloader(opt, imgsz, gs, hyp=hyp, prefix=colorstr('train: '),
+                                            cache=opt.cache_images, rect=opt.rect, rank=opt.global_rank,
+                                            void_classes=void_classes, valid_classes=valid_classes)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
 
     # Process 0
-    if rank in [-1, 0]:
+    if opt.global_rank in [-1, 0]:
         ema.updates = start_epoch * nb // accumulate  # set EMA updates
-        testloader = create_dataloader(opt.DATASET.val, imgsz_test, total_batch_size, gs, opt, root=opt.DATASET.root,  # testloader
-                                       hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
-                                       world_size=opt.world_size, workers=opt.workers,
+        testloader = create_dataloader(opt, imgsz_test, gs, hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
                                        pad=0.5, prefix=colorstr('val: '),
-                                       img_suffix=opt.DATASET.img_suffix, label_suffix=opt.DATASET.label_suffix, depth_suffix=opt.DATASET.depth_suffix,
-                                       void_classes=void_classes, valid_classes=valid_classes, dataset=opt.DATASET.dataset)[0]
+                                       void_classes=void_classes, valid_classes=valid_classes)[0]
 
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -250,15 +244,15 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         # Update image weights (optional)
         if opt.image_weights:
             # Generate indices
-            if rank in [-1, 0]:
+            if opt.global_rank in [-1, 0]:
                 cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
                 iw = labels_to_image_weights(dataset.labels, nc=nc, class_weights=cw)  # image weights
                 dataset.indices = random.choices(range(dataset.n), weights=iw, k=dataset.n)  # rand weighted idx
             # Broadcast if DDP
-            if rank != -1:
-                indices = (torch.tensor(dataset.indices) if rank == 0 else torch.zeros(dataset.n)).int()
+            if opt.global_rank != -1:
+                indices = (torch.tensor(dataset.indices) if opt.global_rank == 0 else torch.zeros(dataset.n)).int()
                 dist.broadcast(indices, 0)
-                if rank != 0:
+                if opt.global_rank != 0:
                     dataset.indices = indices.cpu().numpy()
 
         # Update mosaic border
@@ -266,11 +260,11 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         # dataset.mosaic_border = [b - imgsz, -b]  # height, width borders
 
         mloss = torch.zeros(4, device=device)  # mean losses
-        if rank != -1:
+        if opt.global_rank != -1:
             dataloader.sampler.set_epoch(epoch)
         pbar = enumerate(dataloader)
         logger.info(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'total', 'targets', 'img_size'))
-        if rank in [-1, 0]:
+        if opt.global_rank in [-1, 0]:
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
@@ -281,7 +275,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
             if ni <= nw:
                 xi = [0, nw]  # x interp
                 # model.gr = np.interp(ni, xi, [0.0, 1.0])  # iou loss ratio (obj_loss = 1.0 or iou)
-                accumulate = max(1, np.interp(ni, xi, [1, nbs / total_batch_size]).round())
+                accumulate = max(1, np.interp(ni, xi, [1, nbs / opt.TRAIN.total_batch_size]).round())
                 for j, x in enumerate(optimizer.param_groups):
                     # bias lr falls from 0.1 to lr0, all other lrs rise from 0.0 to lr0
                     x['lr'] = np.interp(ni, xi, [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lf(epoch)])
@@ -300,7 +294,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
             with amp.autocast(enabled=cuda):
                 pred = model(imgs)  # forward
                 loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
-                if rank != -1:
+                if opt.global_rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
                 if opt.quad:
                     loss *= 4.
@@ -317,7 +311,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                     ema.update(model)
 
             # Print
-            if rank in [-1, 0]:
+            if opt.global_rank in [-1, 0]:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
                 mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
                 s = ('%10s' * 2 + '%10.4g' * 6) % (
@@ -343,14 +337,14 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         scheduler.step()
 
         # DDP process 0 or single-GPU
-        if rank in [-1, 0]:
+        if opt.global_rank in [-1, 0]:
             # mAP
             if ema:
                 ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
             final_epoch = epoch + 1 == epochs
             if not opt.notest or final_epoch:  # Calculate mAP
-                results, maps, times = test.test(opt.data,
-                                                 batch_size=total_batch_size,
+                results, maps, times = test.test(opt.DATASET,
+                                                 batch_size=opt.TRAIN.total_batch_size,
                                                  imgsz=imgsz_test,
                                                  model=ema.ema,
                                                  single_cls=opt.single_cls,
@@ -401,7 +395,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training
 
-    if rank in [-1, 0]:
+    if opt.global_rank in [-1, 0]:
         # Strip optimizers
         final = best if best.exists() else last  # final model
         for f in [last, best]:
@@ -425,7 +419,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         if opt.data.endswith('coco.yaml') and nc == 80:  # if COCO
             for conf, iou, save_json in ([0.25, 0.45, False], [0.001, 0.65, True]):  # speed, mAP tests
                 results, _, _ = test.test(opt.data,
-                                          batch_size=total_batch_size,
+                                          batch_size=opt.TRAIN.total_batch_size,
                                           imgsz=imgsz_test,
                                           conf_thres=conf,
                                           iou_thres=iou,
@@ -480,7 +474,7 @@ if __name__ == '__main__':
         assert len(cfg.cfg) or len(cfg.weights), 'either --cfg or --weights must be specified'
 
     # DDP mode
-    device = select_device(cfg.device, batch_size=cfg.batch_size)
+    device = select_device(cfg.device, batch_size=cfg.TRAIN.batch_size)
     if cfg.local_rank != -1:
         assert torch.cuda.device_count() > cfg.local_rank
         torch.cuda.set_device(cfg.local_rank)

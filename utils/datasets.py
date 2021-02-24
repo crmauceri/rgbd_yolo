@@ -61,7 +61,7 @@ def create_dataloader(opt, imgsz, stride, hyp=None, pad=0.0, prefix='',
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(opt.DATASET.train, opt.DATASET.root, imgsz, opt.TRAIN.batch_size,
-                                      augment=opt.TRAIN.augment,  # augment images
+                                      augment=opt.DATASET.augment,  # augment images
                                       hyp=hyp,  # augmentation hyperparameters
                                       rect=rect,  # rectangular training
                                       cache_images=cache,

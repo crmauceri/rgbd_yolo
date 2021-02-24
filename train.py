@@ -74,7 +74,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
     names = ['item'] if opt.single_cls and len(opt.DATASET.names) != 1 else opt.DATASET.names  # class names
     names = [names[i] for i in valid_classes]
-    assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.data)  # check
+    assert len(names) == nc, '%g names found for nc=%g dataset in %s' % (len(names), nc, opt.config_file)  # check
 
     # Model
     pretrained = opt.weights.endswith('.pt')
@@ -192,7 +192,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                             void_classes=void_classes, valid_classes=valid_classes)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
-    assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
+    assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.config_file, nc - 1)
 
     # Process 0
     if opt.global_rank in [-1, 0]:
@@ -343,7 +343,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                 ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
             final_epoch = epoch + 1 == epochs
             if not opt.notest or final_epoch:  # Calculate mAP
-                results, maps, times = test.test(opt.DATASET,
+                results, maps, times = test.test(opt,
                                                  batch_size=opt.TRAIN.total_batch_size,
                                                  imgsz=imgsz_test,
                                                  model=ema.ema,
@@ -416,9 +416,9 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
         # Test best.pt
         logger.info('%g epochs completed in %.3f hours.\n' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
-        if opt.data.endswith('coco.yaml') and nc == 80:  # if COCO
+        if opt.DATASET.dataset == 'coco' and nc == 80:  # if COCO
             for conf, iou, save_json in ([0.25, 0.45, False], [0.001, 0.65, True]):  # speed, mAP tests
-                results, _, _ = test.test(opt.data,
+                results, _, _ = test.test(opt,
                                           batch_size=opt.TRAIN.total_batch_size,
                                           imgsz=imgsz_test,
                                           conf_thres=conf,
@@ -439,7 +439,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")
+    parser = argparse.ArgumentParser(description="PyTorch Yolov5 Training")
     parser.add_argument('config_file', help='config file path')
     parser.add_argument(
         "opts",
@@ -453,6 +453,7 @@ if __name__ == '__main__':
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    cfg.config_file = args.config_file
     print(cfg)
     
     set_logging(cfg.global_rank)

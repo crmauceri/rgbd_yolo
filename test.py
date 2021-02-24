@@ -6,7 +6,6 @@ from threading import Thread
 
 import numpy as np
 import torch
-import yaml
 from tqdm import tqdm
 
 from models.experimental import attempt_load
@@ -16,9 +15,9 @@ from utils.general import coco80_to_coco91_class, check_dataset, check_file, che
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
 from utils.torch_utils import select_device, time_synchronized
+from data.config_default import get_cfg_defaults
 
-
-def test(data,
+def test(opt,
          weights=None,
          batch_size=32,
          imgsz=640,
@@ -67,9 +66,9 @@ def test(data,
 
     # Configure
     model.eval()
-    check_dataset(data)  # check
-    nc = 1 if single_cls else int(data.nc)  # number of classes
-    is_coco = data.dataset == 'coco'
+    check_dataset(opt.DATASET)  # check
+    nc = 1 if single_cls else int(opt.DATASET.nc)  # number of classes
+    is_coco = opt.DATASET.dataset == 'coco'
     iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
     niou = iouv.numel()
 
@@ -84,9 +83,9 @@ def test(data,
     if not training:
         img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
         _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
-        path = data.test if opt.task == 'test' else data.val  # path to val/test images
+        path = opt.DATASET.test if opt.TEST.task == 'test' else opt.DATASET.val  # path to val/test images
         dataloader = create_dataloader(path, imgsz, batch_size, model.stride.max(), opt, pad=0.5, rect=True,
-                                       prefix=colorstr('test: ' if opt.task == 'test' else 'val: '), dataset=data.dataset)[0]
+                                       prefix=colorstr('test: ' if opt.TEST.task == 'test' else 'val: '), dataset=opt.DATASET.dataset)[0]
 
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
@@ -279,57 +278,50 @@ def test(data,
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='*.data path')
-    parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.6, help='IOU threshold for NMS')
-    parser.add_argument('--task', default='val', help="'val', 'test', 'study'")
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
-    parser.add_argument('--augment', action='store_true', help='augmented inference')
-    parser.add_argument('--verbose', action='store_true', help='report mAP by class')
-    parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
-    parser.add_argument('--save-hybrid', action='store_true', help='save label+prediction hybrid results to *.txt')
-    parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
-    parser.add_argument('--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
-    parser.add_argument('--project', default='runs/test', help='save to project/name')
-    parser.add_argument('--name', default='exp', help='save to project/name')
-    parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    opt = parser.parse_args()
-    opt.save_json |= opt.data.endswith('coco.yaml')
-    opt.data = check_file(opt.data)  # check file
-    print(opt)
+    parser = argparse.ArgumentParser(description="PyTorch Yolov5 Test")
+    parser.add_argument('config_file', help='config file path')
+    parser.add_argument(
+        "opts",
+        help="Modify config options using the command-line",
+        default=None,
+        nargs=argparse.REMAINDER,
+    )
+
+    args = parser.parse_args()
+
+    cfg = get_cfg_defaults()
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    print(cfg)
     check_requirements()
 
-    if opt.task in ['val', 'test']:  # run normally
-        test(opt.data,
-             opt.weights,
-             opt.batch_size,
-             opt.img_size,
-             opt.conf_thres,
-             opt.iou_thres,
-             opt.save_json,
-             opt.single_cls,
-             opt.augment,
-             opt.verbose,
-             save_txt=opt.save_txt | opt.save_hybrid,
-             save_hybrid=opt.save_hybrid,
-             save_conf=opt.save_conf,
+    if cfg.task in ['val', 'test']:  # run normally
+        test(cfg,
+             cfg.weights,
+             cfg.TEST.batch_size,
+             cfg.DATASET.img_size,
+             cfg.TEST.conf_thres,
+             cfg.TEST.iou_thres,
+             cfg.TEST.save_json,
+             cfg.single_cls,
+             cfg.DATASET.augment,
+             cfg.TEST.verbose,
+             save_txt=cfg.TEST.save_txt | cfg.TEST.save_hybrid,
+             save_hybrid=cfg.TEST.save_hybrid,
+             save_conf=cfg.TEST.save_conf,
              )
 
-    elif opt.task == 'study':  # run over a range of settings and save/plot
+    elif cfg.task == 'study':  # run over a range of settings and save/plot
         for weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
-            f = 'study_%s_%s.txt' % (Path(opt.data).stem, Path(weights).stem)  # filename to save to
+            f = 'study_%s_%s.txt' % (Path(cfg.data).stem, Path(weights).stem)  # filename to save to
             x = list(range(320, 800, 64))  # x axis
             y = []  # y axis
             for i in x:  # img-size
                 print('\nRunning %s point %s...' % (f, i))
-                r, _, t = test(opt.data, weights, opt.batch_size, i, opt.conf_thres, opt.iou_thres, opt.save_json,
+                r, _, t = test(cfg, weights, cfg.batch_size, i, cfg.conf_thres, cfg.iou_thres, cfg.save_json,
                                plots=False)
                 y.append(r + t)  # results and times
             np.savetxt(f, y, fmt='%10.4g')  # save
+        os.system('zip -r study.zip study_*.txt')
         os.system('zip -r study.zip study_*.txt')
         plot_study_txt(f, x)  # plot

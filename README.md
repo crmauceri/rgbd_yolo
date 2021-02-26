@@ -45,6 +45,16 @@ Python 3.8 or later with all [requirements.txt](https://github.com/ultralytics/y
 $ pip install -r requirements.txt
 ```
 
+ This is a seperate repo for use in different projects. For more details, see the repo [README](https://github.com/crmauceri/dataset_loaders)
+    ```Shell
+    git clone https://github.com/crmauceri/dataset_loaders.git
+    cd dataset_loaders/datasets
+    make
+    cd ../..
+    pip install -e .
+    ``` 
+
+
 
 ## Tutorials
 

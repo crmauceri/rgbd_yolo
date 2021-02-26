@@ -39,6 +39,7 @@ _C.quad = False  #'quad dataloader
 
 # Variables for test.py
 _C.TEST = CN()
+_C.TEST.batch_size = 32
 _C.TEST.conf_thres = 0.001 # object confidence threshold
 _C.TEST.iou_thres = 0.6 # IOU threshold for NMS
 _C.TEST.task = 'val' # 'val', 'test', 'study'")
@@ -49,6 +50,7 @@ _C.TEST.save_conf = False #save confidences in save_txt labels
 _C.TEST.save_json = False #save a cocoapi-compatible JSON results file
 
 # Variables for detect.py
+_C.DETECT = CN()
 _C.DETECT.source = 'data/images'
 _C.DETECT.conf_three = 0.25, #object confidence threshold
 _C.DETECT.iou_thres = 0.45 #IOU threshold for NMS
@@ -67,6 +69,7 @@ _C.DATASET.augment = True
 # train and val data as 1) directory = path/images/, 2) file = path/images.txt, or 3) list = [path1/images/, path2/images/]
 _C.DATASET.train = 'datasets/cityscapes/leftImg8bit/train_extra/'
 _C.DATASET.val = 'datasets/cityscapes/leftImg8bit/val/'
+_C.DATASET.test = ''
 _C.DATASET.root = ''
 _C.DATASET.channels = 4
 _C.DATASET.img_size = [640, 640]  #'[train, test] image sizes

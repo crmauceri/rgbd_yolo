@@ -708,6 +708,7 @@ def load_image(self, index):
     # loads 1 image from dataset, returns img, original hw, resized hw
     img = self.imgs[index]
 
+    if self.cfg.DATASET.dataset ==
     if img is None:  # not cached
         path = self.img_files[index]
         ret = load_image_file(self, path)

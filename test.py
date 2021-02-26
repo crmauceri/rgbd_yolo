@@ -84,8 +84,8 @@ def test(opt,
         img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
         _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
         path = opt.DATASET.test if opt.TEST.task == 'test' else opt.DATASET.val  # path to val/test images
-        dataloader = create_dataloader(path, imgsz, batch_size, model.stride.max(), opt, pad=0.5, rect=True,
-                                       prefix=colorstr('test: ' if opt.TEST.task == 'test' else 'val: '), dataset=opt.DATASET.dataset)[0]
+        dataloader = create_dataloader(opt, path, imgsz, model.stride.max(), pad=0.5, rect=True,
+                                       prefix=colorstr('test: ' if opt.TEST.task == 'test' else 'val: '))[0]
 
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
@@ -295,11 +295,11 @@ if __name__ == '__main__':
     print(cfg)
     check_requirements()
 
-    if cfg.task in ['val', 'test']:  # run normally
+    if cfg.TEST.task in ['val', 'test']:  # run normally
         test(cfg,
              cfg.weights,
              cfg.TEST.batch_size,
-             cfg.DATASET.img_size,
+             cfg.DATASET.img_size[1],
              cfg.TEST.conf_thres,
              cfg.TEST.iou_thres,
              cfg.TEST.save_json,

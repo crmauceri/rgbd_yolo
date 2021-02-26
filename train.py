@@ -187,7 +187,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         model = DDP(model, device_ids=[opt.local_rank], output_device=opt.local_rank)
 
     # Trainloader
-    dataloader, dataset = create_dataloader(opt, imgsz, gs, hyp=hyp, prefix=colorstr('train: '),
+    dataloader, dataset = create_dataloader(opt, opt.DATASET.train, imgsz, gs, hyp=hyp, prefix=colorstr('train: '),
                                             cache=opt.cache_images, rect=opt.rect, rank=opt.global_rank,
                                             void_classes=void_classes, valid_classes=valid_classes)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
@@ -197,7 +197,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     # Process 0
     if opt.global_rank in [-1, 0]:
         ema.updates = start_epoch * nb // accumulate  # set EMA updates
-        testloader = create_dataloader(opt, imgsz_test, gs, hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
+        testloader = create_dataloader(opt, opt.DATASET.val, imgsz_test, gs, hyp=hyp,
+                                       cache=opt.cache_images and not opt.notest, rect=True, rank=-1,
                                        pad=0.5, prefix=colorstr('val: '),
                                        void_classes=void_classes, valid_classes=valid_classes)[0]
 

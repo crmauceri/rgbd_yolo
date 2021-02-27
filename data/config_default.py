@@ -77,6 +77,7 @@ _C.DATASET.img_size = [640, 640]  #'[train, test] image sizes
 _C.DATASET.img_suffix = 'image'
 _C.DATASET.label_suffix = 'label'
 _C.DATASET.depth_suffix = 'depth'
+_C.DATASET.depth_ext = 'png'
 
 # number of classes
 _C.DATASET.nc = 10

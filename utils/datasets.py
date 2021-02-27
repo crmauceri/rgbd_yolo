@@ -60,7 +60,8 @@ def create_dataloader(opt, path, imgsz, stride, hyp=None, pad=0.0, prefix='',
 
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
-        dataset = LoadImagesAndLabels(path, opt.DATASET.root, imgsz, opt.TRAIN.batch_size,
+        dataset = LoadImagesAndLabels(path, opt,
+                                      opt.DATASET.root, imgsz, opt.TRAIN.batch_size,
                                       augment=opt.DATASET.augment,  # augment images
                                       hyp=hyp,  # augmentation hyperparameters
                                       rect=rect,  # rectangular training
@@ -336,7 +337,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
-    def __init__(self, path, root, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
+    def __init__(self, path, cfg, root, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='',
                  img_suffix='image', label_suffix='label', depth_suffix='depth',
                  void_classes=[], valid_classes=[], use_depth=True, dataset='cityscapes'):
@@ -398,7 +399,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.img_files = list(cache.keys())  # update
         self.label_files = self.replace_suffix(cache.keys(), img_suffix, label_suffix) # update
         if self.use_depth:
-            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix, '.png')
+            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix, cfg.DATASET.depth_ext)
 
         if single_cls:
             for x in self.labels:

@@ -372,7 +372,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix, '.png'))
+        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix, cfg.DATASET.depth_ext))
         #self.img_files = self.img_files[:100]
 
         # Check cache

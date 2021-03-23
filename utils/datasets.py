@@ -352,6 +352,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.void_classes = void_classes
         self.valid_idx = dict(zip(valid_classes, range(len(valid_classes))))
         self.use_depth = use_depth
+        self.depth_suffix = depth_suffix
         self.dataset = dataset
 
         try:
@@ -696,25 +697,27 @@ def load_image_file(self, path):
     return ret
 
 def load_depth_file(self, path):
-    _depth_arr = np.asarray(Image.open(path), dtype='uint16')
-
-    if self.cfg.DATASET.depth_suffix == 'completed_depth':
+    if self.depth_suffix == 'completed_depth':
+        _depth_arr = np.asarray(Image.open(path), dtype='uint16')
         pass #TODO scaling needed?
-    elif self.cfg.DATASET.dataset == 'cityscapes':
+    elif self.dataset == 'cityscapes':
         _disparity_arr = np.array(Image.open(path)).astype(np.float32)
         # Conversion from https://github.com/mcordts/cityscapesScripts see `disparity`
         # See https://github.com/mcordts/cityscapesScripts/issues/55#issuecomment-411486510
         _disparity_arr[_disparity_arr > 0] = (_disparity_arr[_disparity_arr > 0] - 1.0) / 256.
         _depth_arr = np.zeros(_disparity_arr.shape)
         _depth_arr[_disparity_arr > 0] = 0.2 * 2262 / _disparity_arr[_disparity_arr > 0]
-    elif self.cfg.DATASET.dataset == 'sunrgbd':
+    elif self.dataset == 'sunrgbd':
+        _depth_arr = np.asarray(Image.open(path), dtype='uint16')
         # Conversion from SUNRGBD Toolbox readData/read3dPoints.m
         _depth_arr = np.bitwise_or(np.right_shift(_depth_arr, 3), np.left_shift(_depth_arr, 16 - 3))
         _depth_arr = np.asarray(_depth_arr, dtype='float') / 1000.0
         _depth_arr[_depth_arr > 8] = 8
         _depth_arr = _depth_arr / 8. * 255.
+    else:
+        raise ValueError('Depth file type not implemented for dataset {}'.format(self.dataset))
 
-    assert(np.all(_depth_arr<256))
+    assert(np.all(_depth_arr < 256))
     depth = _depth_arr.astype(np.uint8)
 
     h0, w0 = depth.shape[:2]  # orig hw

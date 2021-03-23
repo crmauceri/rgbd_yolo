@@ -614,6 +614,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 img[:, :, :3] = rgb_array
             except TypeError as e:
                 raise e
+            except KeyError as e:
+                raise e
 
         nL = len(labels)  # number of labels
         if nL:

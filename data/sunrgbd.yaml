@@ -16,7 +16,7 @@ DATASET:
   img_suffix: 'image'
   label_suffix: 'bbox'
   depth_suffix: 'normalized_depth'
-  depth_ext: 'jpg'
+  depth_ext: '.jpg'
 
   nc: 35
   void_classes: [0, 1, 2]

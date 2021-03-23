@@ -579,7 +579,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         if self.augment:
             try:
-                rgb = Image.fromarray(img[:, :, :3])
+                rgb = Image.fromarray(img[:, :, :3].astype(np.uint8))
 
                 # Darken Image
                 gamma = 1.0 + random.random() * 1.2
@@ -696,15 +696,32 @@ def load_image_file(self, path):
     return ret
 
 def load_depth_file(self, path):
-    depth = cv2.imread(path, cv2.IMREAD_ANYDEPTH)  # BGR
-    if depth is None:
-        raise IOError('cv2.imread failed ' + path)
+    _depth_arr = np.asarray(Image.open(path), dtype='uint16')
+
+    if self.cfg.DATASET.depth_suffix == 'completed_depth':
+        pass #TODO scaling needed?
+    elif self.cfg.DATASET.dataset == 'cityscapes':
+        _disparity_arr = np.array(Image.open(path)).astype(np.float32)
+        # Conversion from https://github.com/mcordts/cityscapesScripts see `disparity`
+        # See https://github.com/mcordts/cityscapesScripts/issues/55#issuecomment-411486510
+        _disparity_arr[_disparity_arr > 0] = (_disparity_arr[_disparity_arr > 0] - 1.0) / 256.
+        _depth_arr = np.zeros(_disparity_arr.shape)
+        _depth_arr[_disparity_arr > 0] = 0.2 * 2262 / _disparity_arr[_disparity_arr > 0]
+    elif self.cfg.DATASET.dataset == 'sunrgbd':
+        # Conversion from SUNRGBD Toolbox readData/read3dPoints.m
+        _depth_arr = np.bitwise_or(np.right_shift(_depth_arr, 3), np.left_shift(_depth_arr, 16 - 3))
+        _depth_arr = np.asarray(_depth_arr, dtype='float') / 1000.0
+        _depth_arr[_depth_arr > 8] = 8
+        _depth_arr = _depth_arr / 8. * 255.
+
+    assert(np.all(_depth_arr<256))
+    depth = _depth_arr.astype(np.uint8)
+
     h0, w0 = depth.shape[:2]  # orig hw
     r = self.img_size / max(h0, w0)  # resize image to img_size
     if r != 1:  # always resize down, only resize up if training with augmentation
         interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
         depth = cv2.resize(depth, (int(w0 * r), int(h0 * r)), interpolation=interp)
-        depth = depth.astype(np.float64)
     return depth
 
 def load_image(self, index):

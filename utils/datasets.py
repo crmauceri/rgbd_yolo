@@ -683,7 +683,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
 # Ancillary functions --------------------------------------------------------------------------------------------------
 def load_image_file(self, path):
-    img = cv2.imread(path)  # BGR
+    img = np.asarray(Image.open(path))
     if img is None:
         raise IOError('cv2.imread failed ' + path)
     h0, w0 = img.shape[:2]  # orig hw

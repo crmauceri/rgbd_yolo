@@ -6,6 +6,7 @@
 #     /yolov5
 
 weights: '' # Train from scratch
+cfg: 'yolov5s.yaml'
 
 DATASET:
   dataset: 'sunrgbd'

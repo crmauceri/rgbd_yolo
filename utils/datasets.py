@@ -193,7 +193,7 @@ class LoadImages:  # for inference
         img = letterbox(img0, new_shape=self.img_size)[0]
 
         # Convert
-        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img.transpose(2, 0, 1)  # RGB to 3x416x416
         img = np.ascontiguousarray(img)
 
         return path, img, img0, self.cap
@@ -255,7 +255,7 @@ class LoadWebcam:  # for inference
         img = letterbox(img0, new_shape=self.img_size)[0]
 
         # Convert
-        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img.transpose(2, 0, 1)  # RGB to 3x416x416
         img = np.ascontiguousarray(img)
 
         return img_path, img, img0, None
@@ -328,7 +328,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         img = np.stack(img, 0)
 
         # Convert
-        # img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
+        img = img.transpose(0, 3, 1, 2)  # RGB to bsx3x416x416
         img = np.ascontiguousarray(img)
 
         return self.sources, img, img0, None
@@ -643,7 +643,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         # Convert
-        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img.transpose(2, 0, 1)  # RGB to 3x416x416
         img = np.ascontiguousarray(img)
 
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes

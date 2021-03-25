@@ -18,9 +18,7 @@ DATASET:
 
   img_suffix: 'image'
   label_suffix: 'bbox'
-  use_depth: True
-  depth_suffix: 'depth_bfx'
-  depth_ext: '.png'
+  use_depth: False
 
   nc: 35
   void_classes: [0, 1, 2]

@@ -4,6 +4,9 @@
 #   /parent_folder
 #     /coco128
 #     /yolov5
+
+weights: '' # Train from scratch
+
 DATASET:
   dataset: 'sunrgbd'
 

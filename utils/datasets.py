@@ -76,7 +76,8 @@ def create_dataloader(opt, path, imgsz, stride, hyp=None, pad=0.0, prefix='',
                                       depth_suffix=opt.DATASET.depth_suffix,
                                       void_classes=void_classes,
                                       valid_classes=valid_classes,
-                                      dataset=opt.DATASET.dataset)
+                                      dataset=opt.DATASET.dataset,
+                                      use_depth=opt.DATASET.use_depth)
 
     batch_size = min(opt.TRAIN.batch_size, len(dataset))
     nw = min([os.cpu_count() // opt.world_size, batch_size if batch_size > 1 else 0, opt.workers])  # number of workers
@@ -192,7 +193,7 @@ class LoadImages:  # for inference
         img = letterbox(img0, new_shape=self.img_size)[0]
 
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
         return path, img, img0, self.cap
@@ -254,7 +255,7 @@ class LoadWebcam:  # for inference
         img = letterbox(img0, new_shape=self.img_size)[0]
 
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
         return img_path, img, img0, None
@@ -327,7 +328,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         img = np.stack(img, 0)
 
         # Convert
-        img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
+        # img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
         img = np.ascontiguousarray(img)
 
         return self.sources, img, img0, None
@@ -642,7 +643,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        # img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes

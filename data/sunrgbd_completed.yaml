@@ -19,6 +19,7 @@ DATASET:
 
   img_suffix: 'image'
   label_suffix: 'bbox'
+  use_depth: True
   depth_suffix: 'completed_depth'
   depth_ext: '.jpg'
 

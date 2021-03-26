@@ -20,6 +20,7 @@ DATASET:
   img_suffix: 'image'
   label_suffix: 'bbox'
   depth_suffix: 'ip_completed'
+  use_depth: True
   depth_ext: '.jpg'
 
   nc: 35

@@ -16,8 +16,8 @@ DATASET:
   img_suffix: 'image'
   label_suffix: 'bbox'
   use_depth: True
-  depth_suffix: 'ip_complete'
-  depth_ext: '.jpg'
+  depth_suffix: 'ip_completed'
+  depth_ext: '.png'
 
   nc: 35
   void_classes: [0, 1, 2]

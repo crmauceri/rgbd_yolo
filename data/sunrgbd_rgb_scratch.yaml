@@ -1,10 +1,6 @@
-# COCO 2017 dataset http://cocodataset.org - first 128 training images
-# Train command: python train.py --data coco128.yaml
-# Default dataset location is next to /yolov5:
-#   /parent_folder
-#     /coco128
-#     /yolov5
+# Train from scratch on sunrgbd dataset with RGB input
 
+name: 'sunrgbd_rgb_scratch'
 weights: '' # Train from scratch
 cfg: 'models/yolov5s.yaml'
 

@@ -1,10 +1,6 @@
-# COCO 2017 dataset http://cocodataset.org - first 128 training images
-# Train command: python train.py --data coco128.yaml
-# Default dataset location is next to /yolov5:
-#   /parent_folder
-#     /coco128
-#     /yolov5
+# Train from scratch on sunrgbd dataset with RGB-lidar input
 
+name: 'sunrgbd_completed'
 weights: '' # Train from scratch
 cfg: 'models/yolov5s.yaml'
 
@@ -19,8 +15,8 @@ DATASET:
 
   img_suffix: 'image'
   label_suffix: 'bbox'
-  depth_suffix: 'ip_completed'
   use_depth: True
+  depth_suffix: 'ip_complete'
   depth_ext: '.jpg'
 
   nc: 35

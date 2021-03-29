@@ -3,7 +3,7 @@
 import glob
 import logging
 import math
-import os
+import os, os.path
 import random
 import re
 import subprocess
@@ -496,13 +496,12 @@ def apply_classifier(x, model, img, im0):
 
 
 def increment_path(path, exist_ok=True, sep=''):
-    # Increment path, i.e. runs/exp --> runs/exp{sep}0, runs/exp{sep}1 etc.
+    # Increment path using current time, i.e. runs/exp --> runs/exp/{date}
     path = Path(path)  # os-agnostic
-    if (path.exists() and exist_ok) or (not path.exists()):
+    if (path.exists() and exist_ok):
         return str(path)
     else:
-        dirs = glob.glob(f"{path}{sep}*")  # similar paths
-        matches = [re.search(rf"%s{sep}(\d+)" % path.stem, d) for d in dirs]
-        i = [int(m.groups()[0]) for m in matches if m]  # indices
-        n = max(i) + 1 if i else 2  # increment number
-        return f"{path}{sep}{n}"  # update path
+        x = datetime.datetime.now()
+        run_id = x.strftime("%Y_%m_%d-%H_%M_%S")
+        experiment_dir = os.path.join(path, run_id)
+        return experiment_dir # update path

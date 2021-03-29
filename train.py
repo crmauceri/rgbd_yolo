@@ -455,6 +455,7 @@ if __name__ == '__main__':
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.config_file = args.config_file
+    cfg.save_dir = increment_path(Path(cfg.project) / cfg.name, exist_ok=cfg.exist_ok | cfg.evolve)  # increment run
     print(cfg)
     
     set_logging(cfg.global_rank)

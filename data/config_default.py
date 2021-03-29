@@ -104,6 +104,7 @@ def get_cfg_defaults():
 
   C.DATASET.img_size.extend([C.DATASET.img_size[-1]] * (2 - len(C.DATASET.img_size)))  # extend to 2 sizes (train, test)
   C.name = 'evolve' if C.evolve else C.name
+  C.save_dir = increment_path(Path(C.project) / C.name, exist_ok =C.exist_ok | C.evolve)  # increment run
 
   C.TRAIN.total_batch_size = C.TRAIN.batch_size
   assert C.TRAIN.batch_size % C.world_size == 0, '--batch-size must be multiple of CUDA device count'

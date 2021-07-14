@@ -703,17 +703,19 @@ def load_depth_file(self, path):
         _depth_arr = np.asarray(Image.open(path), dtype='uint16')
         _depth_arr = _depth_arr / 256. # Scale [0, 255]
     elif self.dataset == 'cityscapes':
-        _disparity_arr = np.array(Image.open(path)).astype(np.float32)
+        _disparity_arr = np.asarray(Image.open(path), dtype='uint16').astype(np.float32)
         # Conversion from https://github.com/mcordts/cityscapesScripts see `disparity`
         # See https://github.com/mcordts/cityscapesScripts/issues/55#issuecomment-411486510
-        # Unit?
+        # Unit? mm?
         _disparity_arr[_disparity_arr > 0] = (_disparity_arr[_disparity_arr > 0] - 1.0) / 256.
         _depth_arr = np.zeros(_disparity_arr.shape)
         _depth_arr[_disparity_arr > 0] = 0.2 * 2262 / _disparity_arr[_disparity_arr > 0]
+        _depth_arr /= 1000.0 # convert to meters
+        _depth_arr /= 256. # Scale [0, 255]
     elif self.dataset == 'sunrgbd':
         _depth_arr = np.asarray(Image.open(path), dtype='uint16')
         # Conversion from SUNRGBD Toolbox readData/read3dPoints.m
-        # Unit?
+        # Unit? meters?
         # Maximum 8
         _depth_arr = np.bitwise_or(np.right_shift(_depth_arr, 3), np.left_shift(_depth_arr, 16 - 3))
         _depth_arr = np.asarray(_depth_arr, dtype='float') / 1000.0

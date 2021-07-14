@@ -4,6 +4,11 @@
 #   /parent_folder
 #     /coco128
 #     /yolov5
+
+name: 'cityscapes'
+weights: '' # Train from scratch
+cfg: 'models/yolov5s.yaml'
+
 DATASET:
   dataset: 'cityscapes'
 
@@ -16,6 +21,7 @@ DATASET:
   label_suffix: 'bbox'
   depth_suffix: 'disparity'
   depth_ext: '.png'
+  use_depth: True
 
   # number of classes
   #nc: 19

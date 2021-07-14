@@ -1,0 +1,35 @@
+# COCO 2017 dataset http://cocodataset.org - first 128 training images
+# Train command: python train.py --data coco128.yaml
+# Default dataset location is next to /yolov5:
+#   /parent_folder
+#     /coco128
+#     /yolov5
+
+name: 'ros'
+weights: '' # Train from scratch
+cfg: 'models/yolov5s.yaml'
+
+DATASET:
+  dataset: 'ros'
+
+  # train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
+  train: 'datasets/ros_bags/test_data/rgb/'
+  val: 'datasets/ros_bags/test_data/rgb/'
+  channels: 4
+
+  img_suffix: 'rgb'
+  label_suffix: 'bbox'
+  depth_suffix: 'depth'
+  depth_ext: '.png'
+  use_depth: True
+
+  nc: 8
+  void_classes: [0, -1]
+  valid_classes: [1, 2, 3, 4, 5, 6, 7, 8]
+
+  # class names
+  names: [ 'unlabeled', 'Survivor', 'Backpack', 'Drill', 'Fire_extinguisher', 'Vent', 'Rope', 'Helmet', 'Cube']
+
+
+
+

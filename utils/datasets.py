@@ -1,5 +1,6 @@
 # Dataset utils and dataloaders
 
+import re
 import glob
 import logging
 import math
@@ -497,7 +498,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if os.path.isfile(lb_file):
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
-                        l = np.array([x.split(',') for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
+                        l = np.array([re.findall(r"[\d\.]+", x) for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
                     if len(l):
                         assert l.shape[1] == 5, 'labels require 5 columns each'
                         assert (l >= 0).all(), 'negative labels'
@@ -700,21 +701,30 @@ def load_image_file(self, path):
 def load_depth_file(self, path):
     if self.depth_suffix == 'completed_depth':
         _depth_arr = np.asarray(Image.open(path), dtype='uint16')
-        pass #TODO scaling needed?
+        _depth_arr = _depth_arr / 256. # Scale [0, 255]
     elif self.dataset == 'cityscapes':
         _disparity_arr = np.array(Image.open(path)).astype(np.float32)
         # Conversion from https://github.com/mcordts/cityscapesScripts see `disparity`
         # See https://github.com/mcordts/cityscapesScripts/issues/55#issuecomment-411486510
+        # Unit?
         _disparity_arr[_disparity_arr > 0] = (_disparity_arr[_disparity_arr > 0] - 1.0) / 256.
         _depth_arr = np.zeros(_disparity_arr.shape)
         _depth_arr[_disparity_arr > 0] = 0.2 * 2262 / _disparity_arr[_disparity_arr > 0]
     elif self.dataset == 'sunrgbd':
         _depth_arr = np.asarray(Image.open(path), dtype='uint16')
         # Conversion from SUNRGBD Toolbox readData/read3dPoints.m
+        # Unit?
+        # Maximum 8
         _depth_arr = np.bitwise_or(np.right_shift(_depth_arr, 3), np.left_shift(_depth_arr, 16 - 3))
         _depth_arr = np.asarray(_depth_arr, dtype='float') / 1000.0
         _depth_arr[_depth_arr > 8] = 8
-        _depth_arr = _depth_arr / 8. * 255.
+        _depth_arr = _depth_arr / 8. * 255. # Make from [0, 255]
+    elif self.dataset in ['kitti', 'ros']:
+        # Conversion from https://github.com/joseph-zhong/KITTI-devkit/blob/master/readme.md
+        # Depth in meters
+        # Maximum 256
+        _depth_arr = np.asarray(Image.open(path), dtype='uint16')
+        _depth_arr = np.asarray(_depth_arr, dtype='float') / 256.0
     else:
         raise ValueError('Depth file type not implemented for dataset {}'.format(self.dataset))
 

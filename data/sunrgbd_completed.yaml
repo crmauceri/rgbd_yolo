@@ -19,7 +19,7 @@ DATASET:
   depth_suffix: 'ip_complete'
   depth_ext: '.png'
 
-  nc: 35
+  nc: 34
   void_classes: [0, 1, 2, 22]
   valid_classes: [3, 4, 5, 6, 7, 8, 9, 10,
                   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,

@@ -483,6 +483,7 @@ if __name__ == '__main__':
         torch.cuda.set_device(cfg.local_rank)
         device = torch.device('cuda', cfg.local_rank)
         dist.init_process_group(backend='nccl', init_method='env://')  # distributed backend
+    logger.info(f"Using {device.type}")
 
     # Hyperparameters
     with open(cfg.hyp) as f:

@@ -375,11 +375,23 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {help_url}')
-        self.img_files = self.test_load(self.replace_suffix(self.img_files, img_suffix, depth_suffix, cfg.DATASET.depth_ext))
+
+        if self.use_depth:
+            if dataset == "sunrgbd":
+                self.depth_files = self.find_depth(self.img_files, img_suffix, depth_suffix, cfg.DATASET.depth_ext)
+            else:
+                self.depth_files = self.replace_suffix(self.img_files, img_suffix, depth_suffix, cfg.DATASET.depth_ext)
+
+            unloadable_indices = self.test_load(self.depth_files)
+            self.img_files = [file for ii, file in enumerate(self.img_files) if ii not in unloadable_indices]
+            self.depth_files = [file for ii, file in enumerate(self.depth_files) if ii not in unloadable_indices]
+            print('{} unloadable images removed'.format(len(unloadable_indices)))
         #self.img_files = self.img_files[:100]
 
         # Check cache
-        self.label_files = self.replace_suffix(self.img_files, img_suffix, label_suffix)  # labels
+        self.label_files = self.replace_suffix(self.img_files, img_suffix, label_suffix)
+
+        # labels
         cache_path = Path(path).with_suffix('.cache')  # cached labels
         if cache_path.is_file():
             cache = torch.load(cache_path)  # load
@@ -401,8 +413,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.shapes = np.array(shapes, dtype=np.float64)
         self.img_files = list(cache.keys())  # update
         self.label_files = self.replace_suffix(cache.keys(), img_suffix, label_suffix) # update
-        if self.use_depth:
-            self.depth_files = self.replace_suffix(cache.keys(), img_suffix, depth_suffix, cfg.DATASET.depth_ext)
 
         if single_cls:
             for x in self.labels:
@@ -461,7 +471,19 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             result = [new_suffix.join(s.rsplit(img_suffix, 1)) for s in img_paths]
         else:
             result = [s.replace(img_suffix, new_suffix) for s in img_paths]
+
         return [x.replace('.' + x.split('.')[-1], ext) for x in result]
+
+    def find_depth(self, img_paths, img_suffix='images', new_suffix='depth', ext='.txt'):
+        # Find file in depth directory where depth directory is a function of image paths # /images/, /depth/ substrings
+        result = []
+        depth_dirs = [os.path.dirname(new_suffix.join(s.rsplit(img_suffix, 1))) for s in img_paths]
+        for d in depth_dirs:
+            files = [os.path.join(d, f) for f in os.listdir(d) if os.path.isfile(os.path.join(d, f)) and f.endswith(ext)]
+            assert(len(files) == 1)
+            result.extend(files)
+        return result
+
 
     def test_load(self, depth_files):
         invalid_idx = set()
@@ -476,10 +498,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                     print(path)
                     invalid_idx.add(ii)
 
-        img_files = [img for ii, img in enumerate(self.img_files) if ii not in invalid_idx]
-
-        print('{} unloadable images removed'.format(len(invalid_idx)))
-        return img_files
+        return invalid_idx
 
     def cache_labels(self, path=Path('./labels.cache'), prefix=''):
         # Cache dataset labels, check images and read shapes
